@@ -36,6 +36,7 @@ import sys
 import tempfile
 import zc.buildout
 import warnings
+import time
 
 warnings.filterwarnings(
     'ignore', '.+is being parsed as a legacy, non PEP 440, version')
@@ -1711,6 +1712,7 @@ def _move_to_eggs_dir_and_compile(dist, dest):
         # We have installed the dist. Now try to rename/move it.
         newloc = os.path.join(dest, os.path.basename(tmp_loc))
         try:
+            logger.info('Renaming begin')
             os.rename(tmp_loc, newloc)
         except OSError:
             # Might be for various reasons.  If it is because newloc already
@@ -1732,6 +1734,18 @@ def _move_to_eggs_dir_and_compile(dist, dest):
                 "We will accept it.\n"
                 "If this contains a wrong package, please remove it yourself.",
                 newloc)
+        except:
+            was_moved = False
+            for retry in range(10):
+                time.sleep(1)
+                try:
+                    os.rename(tmp_loc, newloc)
+                    was_moved = True
+                    break
+                except:
+                    logger.warn('RRRRRRRRRRRRRRRRRRRR Retrying to copy')
+            if not was_moved:
+                raise
         else:
             # There were no problems during the rename.
             # Do the compile step.
