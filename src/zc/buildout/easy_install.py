@@ -1711,48 +1711,56 @@ def _move_to_eggs_dir_and_compile(dist, dest):
 
         # We have installed the dist. Now try to rename/move it.
         newloc = os.path.join(dest, os.path.basename(tmp_loc))
-        try:
-            logger.info('Renaming begin')
-            os.rename(tmp_loc, newloc)
-        except OSError:
-            # Might be for various reasons.  If it is because newloc already
-            # exists, we can investigate.
-            if not os.path.exists(newloc):
-                # No, it is a different reason.  Give up.
-                raise
-            # Try to use it as environment and check if our project is in it.
-            newdist = _get_matching_dist_in_location(dist, newloc)
-            if newdist is None:
-                # Path exists, but is not our package.  We could
-                # try something, but it seems safer to bail out
-                # with the original error.
-                raise
-            # newloc looks okay to use.  Do print a warning.
-            logger.warn(
-                "Path %s unexpectedly already exists.\n"
-                "Maybe a buildout running in parallel has added it. "
-                "We will accept it.\n"
-                "If this contains a wrong package, please remove it yourself.",
-                newloc)
-        except:
-            was_moved = False
-            for retry in range(10):
-                time.sleep(1)
-                try:
-                    os.rename(tmp_loc, newloc)
-                    was_moved = True
-                    break
-                except:
-                    logger.warn('RRRRRRRRRRRRRRRRRRRR Retrying to copy')
-            if not was_moved:
-                raise
-        else:
-            # There were no problems during the rename.
-            # Do the compile step.
-            redo_pyc(newloc)
-            newdist = _get_matching_dist_in_location(dist, newloc)
-            assert newdist is not None  # newloc above is missing our dist?!
+        def renaming():
+            try:
+                # logger.info('Renaming begin')
+                os.rename(tmp_loc, newloc)
+            except OSError:
+                # Might be for various reasons.  If it is because newloc already
+                # exists, we can investigate.
+                if not os.path.exists(newloc):
+                    # No, it is a different reason.  Give up.
+                    raise
+                # Try to use it as environment and check if our project is in it.
+                newdist = _get_matching_dist_in_location(dist, newloc)
+                if newdist is None:
+                    # Path exists, but is not our package.  We could
+                    # try something, but it seems safer to bail out
+                    # with the original error.
+                    raise
+                # newloc looks okay to use.  Do print a warning.
+                logger.warn(
+                    "Path %s unexpectedly already exists.\n"
+                    "Maybe a buildout running in parallel has added it. "
+                    "We will accept it.\n"
+                    "If this contains a wrong package, please remove it yourself.",
+                    newloc)
+            else:
+                # There were no problems during the rename.
+                # Do the compile step.
+                redo_pyc(newloc)
+                newdist = _get_matching_dist_in_location(dist, newloc)
+                assert newdist is not None  # newloc above is missing our dist?!
+                return newdist
+        newdist = renaming()
+    except PermissionError:
+        # On Windows sometimes we have PermissionError
+        # to fix it need to sleep for some time and retry rename
+        logger.warn('PermissionError while renaming')
+        was_moved = False
+        for retry in range(10):
+            time.sleep(0.2)
+            try:
+                newdist = renaming()
+                was_moved = True
+                logger.info('Successfully renamed')
+                break
+            except:
+                logger.info('trying to rename...')
+        if not was_moved:
+            raise
     finally:
         # Remember that temporary directories must be removed
         shutil.rmtree(tmp_dest)
+        # pass
     return newdist
